@@ -37,14 +37,15 @@ test("song requests require separate, bounded title and artist fields", () => {
 });
 
 test("Gemini output schema requires exactly the requested number of well-formed candidates", () => {
-  const candidate = { title: "Arrival", year: 2016, reason: "A quiet, searching ache beneath the vastness." };
+  const candidate = { title: "Arrival", year: 2016 };
   assert.equal(GeminiRecommendationOutputSchema(5).safeParse({ candidates: Array(5).fill(candidate) }).success, true);
   assert.equal(GeminiRecommendationOutputSchema(5).safeParse({ candidates: Array(4).fill(candidate) }).success, false);
+  assert.equal(RecommendationCandidateSchema.safeParse({ ...candidate, reason: "No longer needed." }).success, false);
   assert.equal(RecommendationCandidateSchema.safeParse({ ...candidate, extra: true }).success, false);
 });
 
 test("results permit only verified movie fields and between one and five recommendations", () => {
-  const item = { movie: { tmdbId: 1, title: "Arrival", releaseDate: "2016-11-11", overview: "A thoughtful story.", posterPath: "/arrival.jpg", rating: 7.9 }, reason: "Its stillness holds the same sense of wonder." };
+  const item = { movie: { tmdbId: 1, title: "Arrival", releaseDate: "2016-11-11", overview: "A thoughtful story.", posterPath: "/arrival.jpg", rating: 7.9 } };
   assert.equal(RecommendationResponseSchema.safeParse({ recommendations: [item] }).success, true);
   assert.equal(RecommendationResponseSchema.safeParse({ recommendations: [] }).success, false);
   assert.equal(RecommendationResponseSchema.safeParse({ recommendations: Array(6).fill(item) }).success, false);

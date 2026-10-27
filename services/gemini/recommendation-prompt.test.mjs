@@ -19,6 +19,8 @@ test("prompt focuses on emotional fit and never claims to analyze actual audio",
   assert.match(prompt, /exactly 5 distinct real feature films/i);
   assert.match(prompt, /emotional experience/i);
   assert.match(prompt, /not listening to audio/i);
+  assert.match(prompt, /only the title and release year/i);
+  assert.doesNotMatch(prompt, /poetic explanation|why it matches/i);
   assert.match(prompt, /JSON only/i);
 });
 

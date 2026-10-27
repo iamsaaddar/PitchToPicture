@@ -3,7 +3,7 @@ import type { VerifiedMovie } from "@/types/movie";
 import { getMovieById, type TmdbMovieDetails } from "./movie";
 import { searchMovies, type TmdbSearchResult } from "./search";
 
-interface RecommendationCandidate { title: string; year: number | null; reason: string }
+interface RecommendationCandidate { title: string; year: number | null }
 
 function normalizeTitle(value: string): string {
 	return value
@@ -110,7 +110,7 @@ export async function verifyMovieCandidate(
 	candidate: RecommendationCandidate,
 ): Promise<VerifiedMovie | null> {
 	const trimmedTitle = candidate.title.trim();
-	if (!trimmedTitle || candidate.reason.trim().length === 0) {
+	if (!trimmedTitle) {
 		return null;
 	}
 

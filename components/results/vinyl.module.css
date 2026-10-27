@@ -1,0 +1,787 @@
+/* =================================================================
+   3D VINYL ALBUM — pure CSS 3D
+   -----------------------------------------------------------------
+   Coordinate system:   +X right   +Y down   +Z toward viewer
+   The album is a square box: W × H × t, centred at the origin.
+
+   Layering in local Z:
+      +t/2  : sleeve front cover    (hides the inner half of the disc)
+       0    : vinyl record          (spinning — Z rotation only)
+      -t/2  : sleeve back cover
+   The spine and top/bottom folds bridge the two covers so the box
+   reads as a solid object from any angle.
+
+   Two independent states:
+     .album        → whole-object rotateY (drag-controlled)
+     .record-spin  → continuous rotateZ    (CSS @keyframes)
+   They live on different nested elements, so they never fight.
+   ================================================================= */
+
+.vinyl-display, .vinyl-display *, .vinyl-display *::before, .vinyl-display *::after { box-sizing: border-box; }
+
+.vinyl-display {
+  /* one responsive driver — everything else derives from it */
+  --size:      min(20vw, 32vh, 250px);
+  --W:         var(--size);                   /* sleeve width  */
+  --H:         var(--size);                   /* sleeve height */
+  --t:         calc(var(--size) * 0.045);     /* sleeve thickness */
+  --record-d:  calc(var(--size) * 0.94);      /* record diameter */
+  --record-x:  calc(var(--size) * 0.45);      /* record centre offset */
+  --yaw:       22deg;                         /* initial Y rotation */
+  width: 100%;
+  min-width: 0;
+  color: #e8ecf2;
+  animation: vinyl-card-enter 550ms var(--motion-ease, cubic-bezier(.22, 1, .36, 1)) both;
+}
+
+/* ------------------------------------------------------- STAGE --- */
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: calc(var(--size) * 1.18);
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  perspective: calc(var(--size) * 3.2);
+  perspective-origin: 50% 46%;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: transparent;
+}
+
+.stage.is-dragging { cursor: grabbing; }
+
+/* soft floor shadow */
+.stage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  width: calc(var(--size) * 1.35);
+  height: calc(var(--size) * 0.16);
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.35) 42%,
+    transparent 72%);
+  filter: blur(7px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ------------------------------------------------------- SCENE --- */
+/* Slight left offset so the protruding record doesn't push the
+   whole composition off-centre.                                    */
+.scene {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: translateX(calc(var(--size) * -0.08));
+  z-index: 1;
+}
+
+/* ------------------------------------------------------- ALBUM --- */
+/* The ONLY element that carries the drag-driven Y rotation.        */
+.album {
+  position: relative;
+  width: var(--W);
+  height: var(--H);
+  transform-style: preserve-3d;
+  transform: rotateY(var(--yaw));
+  will-change: transform;
+}
+
+/* ---------------------------- SLEEVE COVERS ---------------------- */
+
+.sleeve-front,
+.sleeve-back {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--size) * 0.009);
+  overflow: hidden;
+  backface-visibility: hidden;
+  background-color: #111216;
+}
+
+.sleeve-front {
+  transform: translateZ(calc(var(--t) / 2));
+  box-shadow:
+    0 calc(var(--size) * 0.025) calc(var(--size) * 0.055) rgba(0, 0, 0, 0.42),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(230, 220, 200, 0.11),
+    inset 1px 0 0 rgba(245, 235, 215, 0.14),
+    inset -1px 0 0 rgba(0, 0, 0, 0.62),
+    inset 0 0 calc(var(--size) * 0.02) rgba(0, 0, 0, 0.42);
+}
+
+.sleeve-back {
+  transform: translateZ(calc(var(--t) / -2)) rotateY(180deg);
+  box-shadow:
+    0 calc(var(--size) * 0.018) calc(var(--size) * 0.045) rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(225, 215, 195, 0.08),
+    inset 1px 0 0 rgba(245, 235, 215, 0.08),
+    inset 0 0 calc(var(--size) * 0.02) rgba(0, 0, 0, 0.62);
+}
+
+/* ---------------------------- BACK COVER CONTENT ----------------- */
+
+.sleeve-back-content {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--size) * 0.065);
+  color: #cdd6e2;
+  background-color: #060810;
+  background-image:
+    linear-gradient(145deg, rgba(32, 30, 29, 0.24) 0%, rgba(6, 8, 12, 0.96) 54%, rgba(4, 5, 8, 0.99) 100%),
+    repeating-linear-gradient(0deg, rgba(235, 225, 205, 0.012) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(235, 225, 205, 0.009) 0 1px, transparent 1px 4px);
+}
+
+.sb-header {
+  padding-bottom: calc(var(--size) * 0.02);
+  border-bottom: 1px solid rgba(140, 170, 210, 0.18);
+}
+
+.sb-artist {
+  font-size: clamp(0.48rem, calc(var(--size) * 0.034), 0.68rem);
+  letter-spacing: 0.15em;
+  color: rgba(155, 190, 235, 0.85);
+}
+
+.sb-title {
+  margin-top: calc(var(--size) * 0.008);
+  font-size: clamp(0.84rem, calc(var(--size) * 0.058), 1.2rem);
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  color: #eef4ff;
+}
+
+.sb-description {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: calc(var(--size) * 0.04) 0;
+  overflow: auto;
+  color: rgba(220, 228, 240, .9);
+  font-size: clamp(0.7rem, calc(var(--size) * 0.044), 0.9rem);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.sb-tracks {
+  list-style: none;
+  margin: calc(var(--size) * 0.035) 0 0;
+  padding: 0;
+  font-size: calc(var(--size) * 0.032);
+  line-height: 1.75;
+  color: rgba(205, 217, 232, 0.9);
+}
+
+.sb-tracks li {
+  display: grid;
+  grid-template-columns: calc(var(--size) * 0.055) 1fr auto;
+  gap: calc(var(--size) * 0.02);
+  align-items: baseline;
+}
+
+.sb-num,
+.sb-time {
+  font-variant-numeric: tabular-nums;
+  font-size: calc(var(--size) * 0.026);
+}
+
+.sb-num  { font-weight: 700; color: rgba(140, 175, 225, 0.7); }
+.sb-time { color: rgba(150, 175, 210, 0.65); }
+
+.sb-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-top: calc(var(--size) * 0.03);
+  border-top: 1px solid rgba(140, 170, 210, 0.16);
+}
+
+.sb-meta {
+  font-size: calc(var(--size) * 0.022);
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  color: rgba(160, 185, 215, 0.72);
+}
+
+.sb-barcode {
+  width: calc(var(--size) * 0.16);
+  height: calc(var(--size) * 0.05);
+  opacity: 0.8;
+  background: repeating-linear-gradient(90deg,
+    #e2e8f2 0 1px, transparent 1px 2px,
+    #e2e8f2 2px 3px, transparent 3px 5px,
+    #e2e8f2 5px 7px, transparent 7px 8px,
+    #e2e8f2 8px 9px, transparent 9px 11px);
+}
+
+/* ---------------------------- FRONT COVER ART -------------------- */
+
+.cover-art {
+  position: absolute;
+  /* Leave a hairline of exposed jacket board around the printed artwork. */
+  inset: calc(var(--size) * 0.0045);
+  border-radius: inherit;
+  overflow: hidden;
+  background: linear-gradient(180deg, #04060e 0%, #0a0f1f 40%, #10182a 68%, #050810 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(235, 225, 205, 0.08);
+}
+
+.movie-poster { position: absolute !important; inset: 0; width: 100%; height: 100%; }
+.movie-poster .movie-artwork__image { object-fit: cover; }
+.movie-poster .movie-artwork__fallback { min-height: 0; height: 100%; padding: 8%; font-size: calc(var(--size) * .07); }
+.cover-art .poster-rating {
+  position: absolute;
+  z-index: 2;
+  right: 5%;
+  bottom: 5%;
+  max-width: 90%;
+  padding: .3rem .48rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / .28);
+  border-radius: 999px;
+  background: rgb(5 8 13 / .82);
+  color: #f4f6fa;
+  font-size: clamp(.62rem, 2vw, .8rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(5px);
+}
+
+/* Printed jacket finish: faint paper fibres and a warm upper-left
+   edge catch. Kept above the artwork without changing its crop. */
+.sleeve-front::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image:
+    linear-gradient(115deg, rgba(255, 247, 226, 0.11) 0%, rgba(255, 247, 226, 0.025) 7%, transparent 24%),
+    repeating-linear-gradient(0deg, rgba(255, 245, 225, 0.018) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 245, 225, 0.012) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, rgba(255, 245, 225, 0.035), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.12));
+  box-shadow: inset 0 0 0 1px rgba(238, 225, 200, 0.12);
+  opacity: 0.58;
+}
+
+/* Soft contact occlusion at the sleeve opening: the disc sits behind
+   the board rather than reading as an unrelated floating layer. */
+.sleeve-front::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  top: 8%;
+  bottom: 8%;
+  right: 0;
+  width: 7%;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.13) 35%, rgba(0, 0, 0, 0.5) 100%),
+    linear-gradient(180deg, rgba(255, 245, 220, 0.05), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.2));
+}
+
+.ca-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 55% 30% at 50% 8%, rgba(120, 160, 255, 0.18), transparent 70%),
+    radial-gradient(ellipse 80% 40% at 50% 90%, rgba(60, 110, 200, 0.22), transparent 65%);
+}
+
+.ca-stars {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 8%, #fff, transparent 100%),
+    radial-gradient(1px 1px at 26% 14%, rgba(255,255,255,0.8), transparent 100%),
+    radial-gradient(1.5px 1.5px at 38% 6%, #fff, transparent 100%),
+    radial-gradient(1px 1px at 52% 12%, rgba(255,255,255,0.7), transparent 100%),
+    radial-gradient(1.3px 1.3px at 66% 9%, #fff, transparent 100%),
+    radial-gradient(1px 1px at 78% 16%, rgba(255,255,255,0.8), transparent 100%),
+    radial-gradient(1.4px 1.4px at 88% 7%, #fff, transparent 100%),
+    radial-gradient(1px 1px at 8% 20%, rgba(255,255,255,0.6), transparent 100%),
+    radial-gradient(1.2px 1.2px at 94% 22%, rgba(255,255,255,0.7), transparent 100%),
+    radial-gradient(1px 1px at 18% 26%, rgba(255,255,255,0.65), transparent 100%);
+}
+
+.ca-moon {
+  position: absolute;
+  left: 50%;
+  top: 11%;
+  width: 22%;
+  aspect-ratio: 1 / 1;
+  margin-left: -11%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%,
+    #ffffff 0%, #e8f0ff 18%, #b8cdf0 42%, #7f9ccc 70%, rgba(60, 80, 120, 0) 100%);
+  box-shadow:
+    0 0 calc(var(--size) * 0.14) rgba(150, 190, 255, 0.55),
+    0 0 calc(var(--size) * 0.30) rgba(90, 140, 230, 0.30);
+}
+
+.ca-horizon {
+  position: absolute;
+  left: 0; right: 0;
+  top: 63%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(150, 200, 255, 0.5), transparent);
+  box-shadow: 0 0 calc(var(--size) * 0.04) rgba(120, 180, 255, 0.4);
+}
+
+.ca-tower {
+  position: absolute;
+  left: 50%; top: 46%;
+  width: 4%; height: 20%;
+  margin-left: -2%;
+  background: linear-gradient(180deg, #1a1e28 0%, #0a0d14 100%);
+  box-shadow: -2px 0 6px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.ca-tower::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: -8%;
+  width: 180%; height: 8%;
+  transform: translateX(-50%);
+  background: #0c0f16;
+  border-radius: 1px;
+}
+
+.ca-tower::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 8%;
+  width: 3px; height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: #ffd47a;
+  box-shadow: 0 0 6px #ffd47a, 0 0 14px rgba(255, 200, 100, 0.7);
+  animation: beacon 3.4s ease-in-out infinite;
+}
+
+@keyframes beacon {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1;    }
+}
+
+.ca-beam {
+  position: absolute;
+  left: 50%; top: 51%;
+  width: 90%; height: 40%;
+  margin-left: -45%;
+  transform: rotate(-10deg);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg,
+    rgba(255, 225, 170, 0.32) 0%,
+    rgba(255, 220, 160, 0.08) 22%,
+    transparent 55%);
+  clip-path: polygon(0 48%, 100% 0, 100% 100%, 0 52%);
+  filter: blur(1px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.ca-water {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 37%;
+  background:
+    repeating-linear-gradient(180deg, rgba(120, 170, 255, 0.05) 0 2px, transparent 2px 6px),
+    linear-gradient(180deg, rgba(20, 40, 80, 0.2) 0%, rgba(6, 12, 26, 0.9) 70%, #03060d 100%);
+}
+
+.ca-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 42%, transparent 45%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, transparent 22%, transparent 70%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+
+.ca-head {
+  position: absolute;
+  top: 30%; left: 0; right: 0;
+  padding: 0 8%;
+  text-align: center;
+}
+
+.ca-artist {
+  font-size: calc(var(--size) * 0.026);
+  letter-spacing: 0.34em;
+  color: rgba(190, 210, 245, 0.85);
+  margin-bottom: calc(var(--size) * 0.03);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+.ca-title {
+  margin: 0;
+  font-size: calc(var(--size) * 0.095);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: 0.08em;
+  color: #f6f9ff;
+  text-shadow:
+    0 0 calc(var(--size) * 0.06) rgba(120, 180, 255, 0.5),
+    0 3px 10px rgba(0, 0, 0, 0.85);
+}
+
+.ca-foot {
+  position: absolute;
+  bottom: 4%; left: 8%; right: 8%;
+  display: flex;
+  justify-content: space-between;
+  font-size: calc(var(--size) * 0.02);
+  letter-spacing: 0.24em;
+  color: rgba(180, 200, 230, 0.7);
+}
+
+.ca-gloss {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 24%,
+    transparent 46%,
+    transparent 72%,
+    rgba(255, 255, 255, 0.04) 100%);
+  mix-blend-mode: screen;
+}
+
+/* ---------------------------- SPINE (left edge) ------------------ */
+
+.spine {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: var(--t);
+  height: var(--H);
+  margin-left: calc(var(--t) * -0.5);
+  margin-top: calc(var(--H) * -0.5);
+  transform: translateX(calc(var(--W) * -0.5)) rotateY(-90deg);
+  transform-origin: center center;
+  backface-visibility: visible;
+  border-radius: calc(var(--size) * 0.008);
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(245, 235, 215, 0.16) 0%, rgba(255, 255, 255, 0.025) 38%, rgba(0, 0, 0, 0.3) 100%),
+    repeating-linear-gradient(0deg, rgba(235, 225, 205, 0.012) 0 1px, transparent 1px 3px),
+    linear-gradient(160deg, #171717 0%, #08090c 60%, #040508 100%);
+  box-shadow:
+    inset 1px 0 0 rgba(220, 232, 255, 0.16),
+    inset -1px 0 0 rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.spine-content {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--t) * 0.32) 0;
+}
+
+.spine-artist,
+.spine-cat {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+
+.spine-artist {
+  font-size: clamp(3px, calc(var(--t) * 0.28), 6px);
+  letter-spacing: 0.12em;
+  color: rgba(160, 195, 245, 0.85);
+}
+
+.spine-cat {
+  font-size: clamp(3px, calc(var(--t) * 0.24), 5px);
+  letter-spacing: 0.12em;
+  color: rgba(140, 170, 210, 0.7);
+}
+
+/* ---------------------------- TOP / BOTTOM FOLDS ---------------- */
+
+.edge {
+  position: absolute;
+  left: 50%;
+  width: var(--W);
+  height: var(--t);
+  margin-left: calc(var(--W) * -0.5);
+  margin-top: calc(var(--t) * -0.5);
+  backface-visibility: visible;
+  border-radius: calc(var(--size) * 0.006);
+  background:
+    linear-gradient(90deg, rgba(245, 235, 215, 0.16), transparent 18%, transparent 78%, rgba(0, 0, 0, 0.5)),
+    repeating-linear-gradient(90deg, rgba(235, 225, 205, 0.025) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, #171716 0%, #0b0b0d 48%, #050608 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(220, 232, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.edge-top {
+  top: 50%;
+  transform: translateY(calc(var(--H) * -0.5)) rotateX(90deg);
+}
+
+.edge-bottom {
+  top: 50%;
+  transform: translateY(calc(var(--H) * 0.5)) rotateX(-90deg);
+  background:
+    linear-gradient(180deg, #060810 0%, #0e1118 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+}
+
+/* ---------------------------- VINYL RECORD ----------------------- */
+/* The holder positions the disc but does NOT rotate it.            */
+.record-holder {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--record-d);
+  height: var(--record-d);
+  margin-left: calc(var(--record-x) - var(--record-d) * 0.5);
+  margin-top: calc(var(--record-d) * -0.5);
+  transform-style: preserve-3d;
+  z-index: 0;
+}
+
+/* Keep the record's contact shadow on its own plane. Avoid filtering the
+   holder itself, which can flatten descendants in CSS 3D scenes. */
+.record-holder::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 1.5%;
+  border-radius: 50%;
+  transform: translateZ(-2px);
+  background: rgba(0, 0, 0, 0.88);
+  box-shadow: 0 calc(var(--size) * 0.018) calc(var(--size) * 0.04) rgba(0, 0, 0, 0.48);
+  filter: blur(calc(var(--size) * 0.012));
+  pointer-events: none;
+}
+
+/* The spinner is the ONLY element that rotates continuously.       */
+.record-spin {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  animation: spin 4s linear infinite;
+  will-change: transform;
+}
+
+@keyframes spin {
+  to { transform: rotateZ(360deg); }
+}
+
+/* Front face — faces +Z, hidden from behind via backface-visibility */
+.record-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  background:
+    radial-gradient(ellipse 72% 58% at 22% 24%, rgba(255, 255, 255, 0.055), transparent 72%),
+    radial-gradient(circle at 50% 50%, #101114 0%, #07080a 38%, #030405 72%, #090a0c 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.075),
+    inset 0 0 0 3px rgba(0, 0, 0, 0.6),
+    inset 0 0 calc(var(--record-d) * 0.065) rgba(0, 0, 0, 0.92);
+}
+
+/* Back face — sits 2px behind, flipped so it faces -Z.             */
+.record-back {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform: translateZ(-2px) rotateY(180deg);
+  backface-visibility: hidden;
+  background: radial-gradient(circle at 50% 50%,
+    #090a0d 0%, #040509 55%, #020305 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* Concentric grooves — masked so they only appear in the ring
+   between the label and the outer edge.                          */
+.record-grooves {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0.92;
+  background:
+    /* Restrained directional reflections: a cool glint on one side,
+       and fine pale groove catches rather than a full blue halo. */
+    conic-gradient(from 205deg at 50% 50%, transparent 0deg 35deg, rgba(95, 117, 158, 0.19) 52deg, rgba(178, 190, 210, 0.12) 59deg, transparent 78deg 360deg),
+    repeating-radial-gradient(circle at 50% 50%,
+      rgba(255, 255, 255, 0.075) 0 0.6px,
+      rgba(0, 0, 0, 0.28) 0.8px 1.5px,
+      transparent 1.8px 3px,
+      rgba(210, 215, 225, 0.035) 3.2px 3.7px,
+      transparent 4px 6px),
+    radial-gradient(ellipse 55% 38% at 28% 18%, rgba(255, 255, 255, 0.065), transparent 72%);
+  -webkit-mask-image: radial-gradient(circle, transparent 0 22%, #000 24% 78%, transparent 80%);
+          mask-image: radial-gradient(circle, transparent 0 22%, #000 24% 78%, transparent 80%);
+}
+
+/* Centre label — front (with text) */
+.record-label {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 33%; height: 33%;
+  margin-left: -16.5%;
+  margin-top: -16.5%;
+  border-radius: 50%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 36% 27%, rgba(255, 255, 255, 0.12), transparent 48%),
+    radial-gradient(circle at 50% 42%, #34363b 0%, #1e2025 42%, #111216 72%, #08090b 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), inset 0 0 12px rgba(0, 0, 0, 0.58);
+  color: #e6e5e0;
+}
+
+.record-label-back {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 33%; height: 33%;
+  margin-left: -16.5%;
+  margin-top: -16.5%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 27%, #303136 0%, #17181c 48%, #08090b 100%);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6);
+}
+
+.label-ring {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 220, 255, 0.3);
+}
+
+.label-mark {
+  position: absolute;
+  top: 15%; left: 0; right: 0;
+  text-align: center;
+  font-size: calc(var(--size) * 0.017);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: rgba(210, 228, 255, 0.85);
+}
+
+.label-title {
+  position: absolute;
+  bottom: 13%; left: 0; right: 0;
+  text-align: center;
+  font-size: calc(var(--size) * 0.02);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.15;
+  color: #f1f6ff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.record-hole {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 7%; height: 7%;
+  margin-left: -3.5%;
+  margin-top: -3.5%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #04060a 0 60%, #1a2230 100%);
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+/* Static specular arc — outside .record-spin, so it stays fixed
+   while the grooves beneath it move.                              */
+.record-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform: translateZ(1px);
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.78;
+  background: conic-gradient(from 0deg,
+    rgba(255, 255, 255, 0)      0deg  24deg,
+    rgba(225, 231, 242, 0.10)  39deg,
+    rgba(255, 255, 255, 0)     58deg 160deg,
+    rgba(180, 194, 218, 0.045) 180deg,
+    rgba(255, 255, 255, 0)    198deg 286deg,
+    rgba(113, 132, 171, 0.10) 306deg,
+    rgba(255, 255, 255, 0)    330deg 360deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 0 24%, #000 26% 76%, transparent 78%);
+          mask-image: radial-gradient(circle, transparent 0 24%, #000 26% 76%, transparent 78%);
+}
+
+/* A thin, broken rim glint makes the disc edge read as polished vinyl. */
+.record-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(from 222deg,
+    transparent 0deg 42deg,
+    rgba(210, 220, 238, 0.38) 55deg,
+    rgba(255, 255, 255, 0.08) 67deg,
+    transparent 83deg 360deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 0 96.5%, #000 97.2% 99.1%, transparent 100%);
+          mask-image: radial-gradient(circle, transparent 0 96.5%, #000 97.2% 99.1%, transparent 100%);
+}
+
+.vinyl-instruction {
+  position: relative;
+  z-index: 2;
+  margin-top: .25rem;
+  color: #898b9a;
+  font-size: .62rem;
+  letter-spacing: .06em;
+  text-align: center;
+}
+
+@keyframes vinyl-card-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------------------------- REDUCED MOTION --------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .record-spin {
+    /* gentle turntable instead of a fast spin — keeps the concept
+       legible without fast continuous motion */
+    animation-duration: 20s;
+  }
+  .ca-tower::after {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
+@media (max-width: 48rem) {
+  .vinyl-display { --size: min(60vw, 35vh, 280px); }
+  .stage { height: calc(var(--size) * 1.22); }
+}

@@ -86,7 +86,7 @@ test("exact title match and correct year are accepted", async () => {
 		},
 	});
 
-	const result = await verify.verifyMovieCandidate({ title: "Arrival", year: 2016, reason: "Thoughtful, emotional sci-fi." });
+  const result = await verify.verifyMovieCandidate({ title: "Arrival", year: 2016 });
 	assert.equal(result?.tmdbId, 12);
 	assert.equal(result?.title, "Arrival");
 });
@@ -111,8 +111,8 @@ test("year mismatch or ambiguous matches are rejected", async () => {
 		},
 	});
 
-	assert.equal(await verify.verifyMovieCandidate({ title: "The Matrix", year: 2003, reason: "Action sci-fi." }), null);
-	assert.equal(await verify.verifyMovieCandidate({ title: "No Clear Match", year: null, reason: "No match." }), null);
+  assert.equal(await verify.verifyMovieCandidate({ title: "The Matrix", year: 2003 }), null);
+  assert.equal(await verify.verifyMovieCandidate({ title: "No Clear Match", year: null }), null);
 });
 
 test("a supplied year is not considered verified when TMDB has no canonical release year", async () => {
@@ -120,5 +120,5 @@ test("a supplied year is not considered verified when TMDB has no canonical rele
 		results: { "Arrival:2016": [{ id: 12, title: "Arrival", originalTitle: "Arrival", releaseDate: "2016-11-11" }] },
 		details: { 12: { id: 12, title: "Arrival", releaseDate: "", overview: "A thoughtful story.", posterPath: null, rating: 0 } },
 	});
-	assert.equal(await verify.verifyMovieCandidate({ title: "Arrival", year: 2016, reason: "Thoughtful, emotional sci-fi." }), null);
+  assert.equal(await verify.verifyMovieCandidate({ title: "Arrival", year: 2016 }), null);
 });

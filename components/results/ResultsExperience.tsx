@@ -22,7 +22,7 @@ export function ResultsExperience({ response, songTitle, artist, onNewSearch }: 
     <section className="ptp-results" aria-labelledby="results-title">
       <div className="ptp-results-heading"><p className="ptp-eyebrow"><span /> YOUR SONG, REIMAGINED</p><h2 id="results-title">A little cinema for <em>{songTitle}</em></h2><p className="ptp-results-byline">{artist} · {response.recommendations.length} {response.recommendations.length === 1 ? "film" : "films"} found</p></div>
       <div className="ptp-case-grid">
-        {response.recommendations.slice(0, revealed).map((item, index) => <MovieCard key={item.movie.tmdbId} movie={item.movie} reason={item.reason} index={index} />)}
+        {response.recommendations.slice(0, revealed).map((item, index) => <MovieCard key={item.movie.tmdbId} movie={item.movie} index={index} />)}
       </div>
       {revealed < response.recommendations.length ? <p className="ptp-reveal-status" role="status">Revealing your collection…</p> : <p className="ptp-reveal-status">Every case is yours to explore.</p>}
       <button className="ptp-reset" onClick={onNewSearch} type="button">← Find films for another song</button>

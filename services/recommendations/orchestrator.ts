@@ -14,7 +14,6 @@ export async function generateRecommendationResponse(request: RecommendationRequ
   const acceptedIds = new Set<number>();
 
   for (const candidate of candidates) {
-    let selectedCandidate = candidate;
     let verified = null;
     try {
       verified = await verifyMovieCandidate(candidate);
@@ -27,7 +26,6 @@ export async function generateRecommendationResponse(request: RecommendationRequ
       try {
         const [replacement] = await generateMovieCandidates(songTitle, artist, 1, candidate.title);
         if (replacement) {
-          selectedCandidate = replacement;
           verified = await verifyMovieCandidate(replacement);
         }
       } catch (error) {
@@ -39,7 +37,7 @@ export async function generateRecommendationResponse(request: RecommendationRequ
 
     if (!verified || acceptedIds.has(verified.tmdbId)) continue;
     acceptedIds.add(verified.tmdbId);
-    recommendations.push({ movie: verified, reason: selectedCandidate.reason });
+    recommendations.push({ movie: verified });
   }
 
   if (!recommendations.length) throw new AppError("INSUFFICIENT_RESULTS", "We couldn't verify any movie recommendations for that song. Try another song or artist.", 422);

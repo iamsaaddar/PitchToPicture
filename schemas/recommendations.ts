@@ -3,7 +3,6 @@ import { VerifiedMovieSchema } from "@/schemas/movie";
 
 export const MAX_SONG_TITLE_LENGTH = 160;
 export const MAX_ARTIST_LENGTH = 120;
-export const MAX_RECOMMENDATION_REASON_LENGTH = 360;
 export const RECOMMENDATION_COUNT = 5;
 
 export const RecommendationRequestSchema = z.object({
@@ -14,7 +13,6 @@ export const RecommendationRequestSchema = z.object({
 export const RecommendationCandidateSchema = z.object({
   title: z.string().trim().min(1).max(160),
   year: z.number().int().min(1888).max(2200).nullable(),
-  reason: z.string().trim().min(1).max(MAX_RECOMMENDATION_REASON_LENGTH),
 }).strict();
 
 export const GeminiRecommendationOutputSchema = (count = RECOMMENDATION_COUNT) => z.object({
@@ -24,7 +22,6 @@ export const GeminiRecommendationOutputSchema = (count = RECOMMENDATION_COUNT) =
 export const RecommendationResponseSchema = z.object({
   recommendations: z.array(z.object({
     movie: VerifiedMovieSchema,
-    reason: z.string().trim().min(1).max(MAX_RECOMMENDATION_REASON_LENGTH),
   }).strict()).min(1).max(RECOMMENDATION_COUNT),
 }).strict();
 
