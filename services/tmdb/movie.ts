@@ -4,6 +4,7 @@ export interface TmdbMovieDetails {
 	id: number;
 	title: string;
 	releaseDate: string;
+	originalLanguage: string;
 	overview: string;
 	posterPath: string | null;
 	rating: number;
@@ -16,6 +17,7 @@ export async function getMovieById(
 		id?: number;
 		title?: string;
 		release_date?: string | null;
+		original_language?: string | null;
 		overview?: string | null;
 		poster_path?: string | null;
 		vote_average?: number;
@@ -30,6 +32,8 @@ export async function getMovieById(
 		title: typeof response.title === "string" ? response.title : "",
 		releaseDate:
 			typeof response.release_date === "string" ? response.release_date : "",
+		originalLanguage:
+			typeof response.original_language === "string" ? response.original_language : "",
 		overview: typeof response.overview === "string" ? response.overview : "",
 		posterPath:
 			typeof response.poster_path === "string" ? response.poster_path : null,

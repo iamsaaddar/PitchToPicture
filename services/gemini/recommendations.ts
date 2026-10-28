@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { AppError } from "@/lib/errors";
 import { GeminiClientError, getGeminiClient } from "@/services/gemini/client";
-import { GeminiRecommendationOutputSchema, RecommendationCandidateSchema, RECOMMENDATION_COUNT, type RecommendationCandidate } from "@/schemas/recommendations";
+import { GeminiRecommendationOutputSchema, RecommendationCandidateSchema, TARGET_RECOMMENDATION_COUNT, MAX_RECOMMENDATION_COUNT, type RecommendationCandidate, type RecommendationRequest } from "@/schemas/recommendations";
 import { buildSongToCinemaPrompt } from "./recommendation-prompt";
 
 type GeminiSchema = Parameters<ReturnType<typeof getGeminiClient>["generateStructured"]>[1];
@@ -29,12 +29,12 @@ function convertSchema(value: unknown): GeminiSchema {
   return target as GeminiSchema;
 }
 
-export async function generateMovieCandidates(songTitle: string, artist: string, count = RECOMMENDATION_COUNT, rejectedTitle?: string): Promise<RecommendationCandidate[]> {
-  if (!Number.isInteger(count) || count < 1 || count > RECOMMENDATION_COUNT) throw new AppError("AI_SERVICE_ERROR", "Invalid candidate count.", 502);
+export async function generateMovieCandidates(songTitle: string, artist: string, filters: Pick<RecommendationRequest, "decades" | "languages"> & { languageLabels?: string[] }, count = TARGET_RECOMMENDATION_COUNT, rejectedTitles: string[] = []): Promise<RecommendationCandidate[]> {
+  if (!Number.isInteger(count) || count < 1 || count > MAX_RECOMMENDATION_COUNT) throw new AppError("AI_SERVICE_ERROR", "Invalid candidate count.", 502);
   let output: unknown;
   try {
     output = await getGeminiClient().generateStructured(
-      buildSongToCinemaPrompt(songTitle, artist, count, rejectedTitle),
+      buildSongToCinemaPrompt(songTitle, artist, count, filters, rejectedTitles),
       convertSchema(z.toJSONSchema(GeminiRecommendationOutputSchema(count))),
       { temperature: 0.65, maxOutputTokens: 400 + count * 180 },
     );
@@ -53,6 +53,6 @@ export async function generateMovieCandidates(songTitle: string, artist: string,
     const valid = RecommendationCandidateSchema.safeParse(candidate);
     if (valid.success) candidates.push(valid.data);
   }
-  if (candidates.length !== count) throw new AppError("AI_SERVICE_ERROR", "We couldn't find enough distinct films for this song. Please try again.", 502);
+  if (!candidates.length) throw new AppError("AI_SERVICE_ERROR", "We couldn't find distinct films for this song. Please try again.", 502);
   return candidates;
 }

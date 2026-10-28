@@ -30,10 +30,11 @@ new Function("require", "module", "exports", javascript)((specifier) => {
 const { RecommendationRequestSchema, RecommendationCandidateSchema, GeminiRecommendationOutputSchema, RecommendationResponseSchema } = loadedModule.exports;
 
 test("song requests require separate, bounded title and artist fields", () => {
-  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Space Song", artist: "Beach House" }).success, true);
-  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Space Song", artist: "" }).success, false);
-  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "x".repeat(161), artist: "Artist" }).success, false);
-  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Song", artist: "Artist", genres: ["Drama"] }).success, false);
+  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Space Song", artist: "Beach House", decades: [], languages: [] }).success, true);
+  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Space Song", artist: "", decades: [], languages: [] }).success, false);
+  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "x".repeat(161), artist: "Artist", decades: [], languages: [] }).success, false);
+  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Song", artist: "Artist", decades: [1930], languages: [] }).success, false);
+  assert.equal(RecommendationRequestSchema.safeParse({ songTitle: "Song", artist: "Artist", decades: [], languages: ["invalid-code"] }).success, false);
 });
 
 test("Gemini output schema requires exactly the requested number of well-formed candidates", () => {
@@ -44,10 +45,12 @@ test("Gemini output schema requires exactly the requested number of well-formed 
   assert.equal(RecommendationCandidateSchema.safeParse({ ...candidate, extra: true }).success, false);
 });
 
-test("results permit only verified movie fields and between one and five recommendations", () => {
+test("results permit only verified movie fields and between one and seven recommendations", () => {
   const item = { movie: { tmdbId: 1, title: "Arrival", releaseDate: "2016-11-11", overview: "A thoughtful story.", posterPath: "/arrival.jpg", rating: 7.9 } };
-  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: [item] }).success, true);
-  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: [] }).success, false);
-  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: Array(6).fill(item) }).success, false);
+  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: [item] }).success, false);
+  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: Array(4).fill(item) }).success, true);
+  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: Array(3).fill(item) }).success, false);
+  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: Array(7).fill(item) }).success, true);
+  assert.equal(RecommendationResponseSchema.safeParse({ recommendations: Array(8).fill(item) }).success, false);
   assert.equal(RecommendationResponseSchema.safeParse({ recommendations: [{ ...item, movie: { ...item.movie, tmdbId: 0 } }] }).success, false);
 });

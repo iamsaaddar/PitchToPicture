@@ -2,45 +2,20 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { ResultsExperience } from "@/components/results/ResultsExperience";
-import type { RecommendationResponse } from "@/types/recommendation";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
   const [songTitle, setSongTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [results, setResults] = useState<RecommendationResponse | null>(null);
 
   async function submitSong(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (loading) return;
     setLoading(true);
-    setError("");
-    setResults(null);
-
-    try {
-      const response = await fetch("/api/recommendations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ songTitle: songTitle.trim(), artist: artist.trim() }),
-      });
-      const data = (await response.json()) as RecommendationResponse | { error?: { message?: string } };
-      if (!response.ok || !("recommendations" in data)) {
-        throw new Error(("error" in data ? data.error?.message : undefined) || "We couldn't turn that song into cinema. Try again.");
-      }
-      setResults(data);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The recommendation service is unavailable. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function reset() {
-    setResults(null);
-    setError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const params = new URLSearchParams({ songTitle: songTitle.trim(), artist: artist.trim() });
+    router.push(`/filters?${params.toString()}`);
   }
 
   return (
@@ -58,14 +33,11 @@ export default function Home() {
           <input id="song-title" name="songTitle" autoComplete="off" maxLength={160} required value={songTitle} onChange={(event) => setSongTitle(event.target.value)} placeholder="e.g. Space Song" disabled={loading} />
           <label htmlFor="song-artist">ARTIST</label>
           <input id="song-artist" name="artist" autoComplete="off" maxLength={120} required value={artist} onChange={(event) => setArtist(event.target.value)} placeholder="e.g. Beach House" disabled={loading} />
-          <button className="ptp-submit" type="submit" disabled={loading}>{loading ? <><span className="ptp-spinner" aria-hidden="true" /> Turning your song into cinema…</> : <>Find its films <span aria-hidden="true">↗</span></>}</button>
+          <button className="ptp-submit" type="submit" disabled={loading}>{loading ? <>Opening your listening room…</> : <>Choose your cinema <span aria-hidden="true">↗</span></>}</button>
         </form>
 
-        {loading ? <p className="ptp-status" role="status" aria-live="polite">Listening for the feeling between the notes<span className="ptp-ellipsis">…</span></p> : null}
-        {error ? <p className="ptp-error" role="alert">{error}</p> : null}
+        {loading ? <p className="ptp-status" role="status" aria-live="polite">Setting the scene<span className="ptp-ellipsis">…</span></p> : null}
       </section>
-
-      {results ? <ResultsExperience response={results} songTitle={songTitle} artist={artist} onNewSearch={reset} /> : null}
 
       <footer className="ptp-footer"><span>MADE FOR THE FEELING, NOT THE GENRE.</span><span>GEMINI × TMDB</span></footer>
     </main>

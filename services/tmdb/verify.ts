@@ -4,6 +4,7 @@ import { getMovieById, type TmdbMovieDetails } from "./movie";
 import { searchMovies, type TmdbSearchResult } from "./search";
 
 interface RecommendationCandidate { title: string; year: number | null }
+interface VerificationFilters { decades: number[]; languages: string[] }
 
 function normalizeTitle(value: string): string {
 	return value
@@ -108,6 +109,7 @@ function toVerifiedMovie(details: TmdbMovieDetails): VerifiedMovie {
 
 export async function verifyMovieCandidate(
 	candidate: RecommendationCandidate,
+	filters: VerificationFilters = { decades: [], languages: [] },
 ): Promise<VerifiedMovie | null> {
 	const trimmedTitle = candidate.title.trim();
 	if (!trimmedTitle) {
@@ -128,8 +130,14 @@ export async function verifyMovieCandidate(
 	if (details.id !== matched.id) {
 		return null;
 	}
+	const detailsYear = extractYearFromDate(details.releaseDate);
+	if (filters.decades.length && (detailsYear === null || !filters.decades.some((decade) => detailsYear >= decade && detailsYear <= decade + 9))) {
+		return null;
+	}
+	if (filters.languages.length && !filters.languages.includes(details.originalLanguage)) {
+		return null;
+	}
 	if (candidate.year !== null && candidate.year !== undefined) {
-		const detailsYear = extractYearFromDate(details.releaseDate);
 		if (detailsYear === null || detailsYear !== candidate.year) {
 			return null;
 		}

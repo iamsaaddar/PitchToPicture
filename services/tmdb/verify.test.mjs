@@ -122,3 +122,15 @@ test("a supplied year is not considered verified when TMDB has no canonical rele
 	});
   assert.equal(await verify.verifyMovieCandidate({ title: "Arrival", year: 2016 }), null);
 });
+
+test("selected decade and original-language constraints are enforced using TMDB details", async () => {
+	const verify = loadVerify({
+		results: { "Arrival:2016": [{ id: 12, title: "Arrival", originalTitle: "Arrival", releaseDate: "2016-11-11" }] },
+		details: {
+			12: { id: 12, title: "Arrival", releaseDate: "2016-11-11", originalLanguage: "en", overview: "A thoughtful story.", posterPath: "/arrival.jpg", rating: 7.9 },
+		},
+	});
+	assert.equal((await verify.verifyMovieCandidate({ title: "Arrival", year: 2016 }, { decades: [2010], languages: ["en"] }))?.tmdbId, 12);
+	assert.equal(await verify.verifyMovieCandidate({ title: "Arrival", year: 2016 }, { decades: [1990], languages: ["en"] }), null);
+	assert.equal(await verify.verifyMovieCandidate({ title: "Arrival", year: 2016 }, { decades: [2010], languages: ["ja"] }), null);
+});
