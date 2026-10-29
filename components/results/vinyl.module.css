@@ -682,28 +682,6 @@
   border: 1px solid rgba(200, 220, 255, 0.3);
 }
 
-.label-mark {
-  position: absolute;
-  top: 15%; left: 0; right: 0;
-  text-align: center;
-  font-size: calc(var(--size) * 0.017);
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  color: rgba(210, 228, 255, 0.85);
-}
-
-.label-title {
-  position: absolute;
-  bottom: 13%; left: 0; right: 0;
-  text-align: center;
-  font-size: calc(var(--size) * 0.02);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1.15;
-  color: #f1f6ff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-
 .record-hole {
   position: absolute;
   left: 50%; top: 50%;
@@ -765,20 +743,6 @@
 @keyframes vinyl-card-enter {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* ---------------------------- REDUCED MOTION --------------------- */
-
-@media (prefers-reduced-motion: reduce) {
-  .record-spin {
-    /* gentle turntable instead of a fast spin — keeps the concept
-       legible without fast continuous motion */
-    animation-duration: 20s;
-  }
-  .ca-tower::after {
-    animation: none;
-    opacity: 0.9;
-  }
 }
 
 @media (max-width: 48rem) {

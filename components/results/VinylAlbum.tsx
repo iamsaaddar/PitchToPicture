@@ -92,8 +92,6 @@ export function VinylAlbum({ movie, index }: VinylAlbumProps) {
 									<div className={className("record-grooves")} />
 									<div className={className("record-label")}>
 										<div className={className("label-ring")} />
-										<div className={className("label-mark")}>PITCHTOPICTURE</div>
-										<div className={className("label-title")}>{movie.title}</div>
 									</div>
 									<div className={className("record-hole")} />
 								</div>

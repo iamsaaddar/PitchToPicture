@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ResultsExperience } from "@/components/results/ResultsExperience";
+import { VinylAwakening } from "@/components/filters/VinylAwakening";
 import { MOVIE_DECADES } from "@/schemas/recommendations";
 import type { RecommendationResponse } from "@/types/recommendation";
 
@@ -83,13 +84,14 @@ export function FilterExperience({ songTitle, artist }: { songTitle: string; art
   async function findFilms(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (loading || !songTitle || !artist) return;
+    const transitionStartedAt = Date.now();
+    const minimumTransitionMs = 2400;
     setLoading(true);
     setTransitioning(true);
     setError("");
     setResults(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
     try {
-      await new Promise((resolve) => window.setTimeout(resolve, 1250));
       const response = await fetch("/api/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -97,8 +99,11 @@ export function FilterExperience({ songTitle, artist }: { songTitle: string; art
       });
       const data = await response.json() as RecommendationResponse | { error?: { message?: string } };
       if (!response.ok || !("recommendations" in data)) throw new Error(("error" in data ? data.error?.message : undefined) || "We couldn't find matching films. Please try again.");
+      await new Promise<void>((resolve) => window.setTimeout(resolve, Math.max(0, minimumTransitionMs - (Date.now() - transitionStartedAt))));
       setResults(data);
+      await new Promise((resolve) => window.setTimeout(resolve, 760));
     } catch (cause) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, Math.max(0, minimumTransitionMs - (Date.now() - transitionStartedAt))));
       setError(cause instanceof Error ? cause.message : "The recommendation service is unavailable. Please try again.");
     } finally {
       setLoading(false);
@@ -164,8 +169,8 @@ export function FilterExperience({ songTitle, artist }: { songTitle: string; art
         </form>
       </section> : null}
 
-      {transitioning ? <section className="ptp-cinema-transition" role="status" aria-live="polite" aria-label="Finding your films"><div className="ptp-transition-orbit"><div className="ptp-transition-record"><span /></div><div className="ptp-transition-ring" /><div className="ptp-transition-ring ptp-transition-ring-two" /></div><p className="ptp-eyebrow"><span /> SIDE B · IN THE MAKING</p><h2>Your song is becoming <em>cinema.</em></h2><p className="ptp-transition-copy">Matching the feeling. Finding the frames.</p><div className="ptp-transition-wave" aria-hidden="true">{Array.from({ length: 31 }, (_, index) => <i key={index} style={{ "--bar": `${8 + ((index * 11) % 26)}px`, "--delay": `${(index % 9) * -0.13}s` } as React.CSSProperties} />)}</div></section> : null}
-      {results ? <ResultsExperience response={results} songTitle={songTitle} artist={artist} onNewSearch={reset} /> : null}
+      {transitioning ? <VinylAwakening songTitle={songTitle} artist={artist} isCompleting={Boolean(results)} /> : null}
+      {results && !transitioning ? <ResultsExperience response={results} songTitle={songTitle} artist={artist} onNewSearch={reset} /> : null}
 
       <footer className="ptp-footer"><span>MADE FOR THE FEELING, NOT THE GENRE.</span><span>GEMINI × TMDB</span></footer>
     </main>
