@@ -1,0 +1,10 @@
+AGENTS.md
+README.md
+Pitch-To-Picture-roadmap.md
+node_modules/
+.next/
+coverage/
+build/
+out/
+next-env.d.ts
+tsconfig.tsbuildinfo

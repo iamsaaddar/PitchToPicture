@@ -9,7 +9,9 @@ export function buildSongToCinemaPrompt(
     ? filters.decades.map((decade) => `${decade}s (${decade}-${decade + 9})`).join(", ")
     : "Any decade from the 1940s through the 2020s";
   const languageConstraint = filters.languages.length
-    ? filters.languages.map((code, index) => `${filters.languageLabels?.[index] ?? code} (${code})`).join(", ")
+    ? filters.languages
+        .map((code, index) => `${filters.languageLabels?.[index] ?? code} (${code})`)
+        .join(", ")
     : "Any original language";
   return [
     "You are a discerning music-informed film curator. Your task is to translate a song's emotional experience into cinema, not to match keywords.",
@@ -25,6 +27,10 @@ export function buildSongToCinemaPrompt(
     "6. FACT-CHECK AND FINALIZE: Recommend real feature films, not TV episodes, series, shorts, hypothetical films, or invented titles. Use the correct recognizable film title and release year when known; use null for an uncertain year rather than guessing. Avoid duplicates and alternate-title duplicates. Never sacrifice a strong emotional match just to match the song's genre, lyrics, or popularity. The release year and original language must fit the strict user filters.",
     `Return exactly ${count} distinct real feature film${count === 1 ? "" : "s"} in the existing structured format. For each, return only the title and release year if known (otherwise null).`,
     "Do not provide the emotional fingerprint, chain of thought, rationales, metadata, ratings, IDs, posters, links, or extra fields. Return only the requested structured data; no prose.",
-    rejectedTitles.length ? `These candidates have already failed TMDB verification, duplicated another film, or violated the selected filters. Do not recommend any of them again: ${JSON.stringify(rejectedTitles)}. Preserve all user filters exactly.` : "",
-  ].filter(Boolean).join("\n\n");
+    rejectedTitles.length
+      ? `These candidates have already failed TMDB verification, duplicated another film, or violated the selected filters. Do not recommend any of them again: ${JSON.stringify(rejectedTitles)}. Preserve all user filters exactly.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }

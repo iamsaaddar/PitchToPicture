@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ResultsExperience } from "@/components/results/ResultsExperience";
 import { VinylAwakening } from "@/components/filters/VinylAwakening";
 import { MOVIE_DECADES } from "@/schemas/recommendations";
 import type { RecommendationResponse } from "@/types/recommendation";
 
-interface LanguageOption { iso639_1: string; english_name: string; name: string }
+interface LanguageOption {
+  iso639_1: string;
+  english_name: string;
+  name: string;
+}
 
 const EXCLUDED_LANGUAGE_CODES = new Set(["ur", "pa", "pt", "bn", "ta", "zh"]);
 const POPULAR_LANGUAGE_CODES = ["en", "hi", "es", "fr", "ja", "ko", "de", "ru", "ar", "it"];
 
-// Keep the selector usable if TMDB's language configuration endpoint is unavailable.
 const FALLBACK_LANGUAGES: LanguageOption[] = [
   { iso639_1: "en", english_name: "English", name: "English" },
   { iso639_1: "hi", english_name: "Hindi", name: "हिन्दी" },
@@ -45,45 +48,71 @@ export function FilterExperience({ songTitle, artist }: { songTitle: string; art
   const [transitioning, setTransitioning] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<RecommendationResponse | null>(null);
+  const requestLock = useRef(false);
+  const requestController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/tmdb/languages")
+    const controller = new AbortController();
+    fetch("/api/tmdb/languages", { signal: controller.signal })
       .then(async (response) => {
-        const data = await response.json() as { languages?: LanguageOption[]; error?: { message?: string } };
+        const data = (await response.json()) as {
+          languages?: LanguageOption[];
+          error?: { message?: string };
+        };
         if (!response.ok || !Array.isArray(data.languages) || data.languages.length === 0) {
           throw new Error(data.error?.message || "TMDB returned an empty language list.");
         }
-        if (active) setLanguageOptions(data.languages);
+        if (!controller.signal.aborted) setLanguageOptions(data.languages);
       })
       .catch(() => {
-        if (active) setLanguageOptions(FALLBACK_LANGUAGES);
+        if (!controller.signal.aborted) setLanguageOptions(FALLBACK_LANGUAGES);
       })
-      .finally(() => { if (active) setLoadingLanguages(false); });
-    return () => { active = false; };
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingLanguages(false);
+      });
+    return () => controller.abort();
   }, []);
 
+  useEffect(() => () => requestController.current?.abort(), []);
+
   const orderedLanguages = useMemo(() => {
-    const availableLanguages = languageOptions.filter((language) => !EXCLUDED_LANGUAGE_CODES.has(language.iso639_1));
-    const popular = POPULAR_LANGUAGE_CODES.map((code) => availableLanguages.find((language) => language.iso639_1 === code)).filter((language): language is LanguageOption => Boolean(language));
+    const availableLanguages = languageOptions.filter(
+      (language) => !EXCLUDED_LANGUAGE_CODES.has(language.iso639_1),
+    );
+    const popular = POPULAR_LANGUAGE_CODES.map((code) =>
+      availableLanguages.find((language) => language.iso639_1 === code),
+    ).filter((language): language is LanguageOption => Boolean(language));
     const query = languageSearch.trim().toLocaleLowerCase();
     const searchResults = query
-      ? availableLanguages.filter((language) => `${language.english_name} ${language.name} ${language.iso639_1}`.toLocaleLowerCase().includes(query))
+      ? availableLanguages.filter((language) =>
+          `${language.english_name} ${language.name} ${language.iso639_1}`
+            .toLocaleLowerCase()
+            .includes(query),
+        )
       : [];
     return { popular, searchResults, availableCount: availableLanguages.length };
   }, [languageOptions, languageSearch]);
 
   function toggleDecade(decade: number) {
-    setDecades((selected) => selected.includes(decade) ? selected.filter((item) => item !== decade) : [...selected, decade].sort((a, b) => a - b));
+    setDecades((selected) =>
+      selected.includes(decade)
+        ? selected.filter((item) => item !== decade)
+        : [...selected, decade].sort((a, b) => a - b),
+    );
   }
 
   function toggleLanguage(code: string) {
-    setLanguages((selected) => selected.includes(code) ? selected.filter((item) => item !== code) : [...selected, code]);
+    setLanguages((selected) =>
+      selected.includes(code) ? selected.filter((item) => item !== code) : [...selected, code],
+    );
   }
 
   async function findFilms(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (loading || !songTitle || !artist) return;
+    if (requestLock.current || !songTitle.trim() || !artist.trim()) return;
+    requestLock.current = true;
+    const controller = new AbortController();
+    requestController.current = controller;
     const transitionStartedAt = Date.now();
     const minimumTransitionMs = 2400;
     setLoading(true);
@@ -96,18 +125,43 @@ export function FilterExperience({ songTitle, artist }: { songTitle: string; art
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ songTitle, artist, decades, languages }),
+        signal: controller.signal,
       });
-      const data = await response.json() as RecommendationResponse | { error?: { message?: string } };
-      if (!response.ok || !("recommendations" in data)) throw new Error(("error" in data ? data.error?.message : undefined) || "We couldn't find matching films. Please try again.");
-      await new Promise<void>((resolve) => window.setTimeout(resolve, Math.max(0, minimumTransitionMs - (Date.now() - transitionStartedAt))));
+      const data = (await response.json()) as
+        RecommendationResponse | { error?: { message?: string } };
+      if (!response.ok || !("recommendations" in data))
+        throw new Error(
+          ("error" in data ? data.error?.message : undefined) ||
+            "We couldn't find matching films. Please try again.",
+        );
+      await waitForTransition(
+        Math.max(0, minimumTransitionMs - (Date.now() - transitionStartedAt)),
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
       setResults(data);
-      await new Promise((resolve) => window.setTimeout(resolve, 760));
+      await waitForTransition(760, controller.signal);
     } catch (cause) {
-      await new Promise<void>((resolve) => window.setTimeout(resolve, Math.max(0, minimumTransitionMs - (Date.now() - transitionStartedAt))));
-      setError(cause instanceof Error ? cause.message : "The recommendation service is unavailable. Please try again.");
+      if (!controller.signal.aborted) {
+        await waitForTransition(
+          Math.max(0, minimumTransitionMs - (Date.now() - transitionStartedAt)),
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "The recommendation service is unavailable. Please try again.",
+          );
+        }
+      }
     } finally {
-      setLoading(false);
-      setTransitioning(false);
+      requestLock.current = false;
+      if (requestController.current === controller) requestController.current = null;
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setTransitioning(false);
+      }
     }
   }
 
@@ -119,60 +173,310 @@ export function FilterExperience({ songTitle, artist }: { songTitle: string; art
 
   return (
     <main className="ptp-shell">
-      <div className="ptp-atmosphere" aria-hidden="true"><span /><span /><span /></div>
-      <header className="ptp-header"><Link href="/" className="ptp-brand" aria-label="PitchToPicture home"><span className="ptp-brand-mark">P</span> PITCH<span>TO</span>PICTURE</Link><span className="ptp-header-note">SIDE A · YOUR CINEMATIC SETTINGS</span></header>
+      <div className="ptp-atmosphere" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <header className="ptp-header">
+        <Link href="/" className="ptp-brand" aria-label="PitchToPicture home">
+          <span className="ptp-brand-mark">P</span> PITCH<span>TO</span>PICTURE
+        </Link>
+        <span className="ptp-header-note">SIDE A · YOUR CINEMATIC SETTINGS</span>
+      </header>
 
-      {!results && !transitioning ? <section className="ptp-filter-page" aria-labelledby="filters-title">
-        <div className="ptp-soundwave" aria-hidden="true">{Array.from({ length: 47 }, (_, index) => <i key={index} style={{ "--bar": `${8 + ((index * 17 + index % 5 * 11) % 25)}px`, "--delay": `${(index % 13) * -0.11}s` } as React.CSSProperties} />)}</div>
-        <p className="ptp-eyebrow"><span /> THE VINYL TIME MACHINE</p>
-        <h1 id="filters-title">Set the scene.<br /><em>Keep the feeling.</em></h1>
-        <p className="ptp-filter-subtitle">Tune the era and language. Your song takes care of the emotion.</p>
-        <div className="ptp-now-playing"><span className="ptp-record-icon ptp-record-spinning" aria-hidden="true"><i /></span><div><span className="ptp-filter-overline"><span className="ptp-live-dot" /> NOW PLAYING</span><strong>{songTitle || "Unknown song"}</strong><span>{artist || "Unknown artist"}</span></div><Link href="/" className="ptp-edit-song">Change track ↗</Link></div>
-
-        <form className="ptp-filter-form" onSubmit={findFilms}>
-          <section className="ptp-filter-section" aria-labelledby="decades-title">
-            <div className="ptp-filter-heading"><span className="ptp-filter-index">01 / ERA</span><div><h2 id="decades-title">Drop the needle on a decade</h2><p>Each era has its own kind of movie magic.</p></div><span className="ptp-selection-count">{decades.length ? `${decades.length} SELECTED` : "OPEN TIMELINE"}</span></div>
-            <div className="ptp-era-timeline" aria-label="Choose movie decades">
-              <div className="ptp-era-track" aria-hidden="true"><span className="ptp-era-track-fill" style={{ left: "0%", width: `${(MOVIE_DECADES.length - 1) ? (Math.max(0, ...decades.map((decade) => MOVIE_DECADES.indexOf(decade as typeof MOVIE_DECADES[number]))) / (MOVIE_DECADES.length - 1)) * 100 : 0}%` }} /></div>
-              {MOVIE_DECADES.map((decade, index) => {
-                const selected = decades.includes(decade);
-                return <button key={decade} type="button" className={`ptp-era-point${selected ? " is-selected" : ""}`} style={{ "--era-position": `${(index / (MOVIE_DECADES.length - 1)) * 100}%` } as React.CSSProperties} onClick={() => toggleDecade(decade)} aria-pressed={selected} aria-label={`${decade}s, films released between ${decade} and ${decade + 9}`}><span className="ptp-era-node"><i /></span><strong>{String(decade).slice(2)}s</strong></button>;
-              })}
+      {!results && !transitioning ? (
+        <section className="ptp-filter-page" aria-labelledby="filters-title">
+          <div className="ptp-soundwave" aria-hidden="true">
+            {Array.from({ length: 47 }, (_, index) => (
+              <i
+                key={index}
+                style={
+                  {
+                    "--bar": `${8 + ((index * 17 + (index % 5) * 11) % 25)}px`,
+                    "--delay": `${(index % 13) * -0.11}s`,
+                  } as React.CSSProperties
+                }
+              />
+            ))}
+          </div>
+          <p className="ptp-eyebrow">
+            <span /> THE VINYL TIME MACHINE
+          </p>
+          <h1 id="filters-title">
+            Set the scene.
+            <br />
+            <em>Keep the feeling.</em>
+          </h1>
+          <p className="ptp-filter-subtitle">
+            Tune the era and language. Your song takes care of the emotion.
+          </p>
+          <div className="ptp-now-playing">
+            <span className="ptp-record-icon ptp-record-spinning" aria-hidden="true">
+              <i />
+            </span>
+            <div>
+              <span className="ptp-filter-overline">
+                <span className="ptp-live-dot" /> NOW PLAYING
+              </span>
+              <strong>{songTitle || "Unknown song"}</strong>
+              <span>{artist || "Unknown artist"}</span>
             </div>
-            <div className="ptp-era-detail" aria-live="polite"><span className="ptp-era-detail-kicker">{decades.length ? "YOUR SELECTED DECADES" : "THE WHOLE RECORD COLLECTION"}</span><strong>{decades.length ? decades.map((decade) => `${decade}s`).join(" · ") : "Any decade"}</strong><p>{decades.length ? `Films released in ${decades.map((decade) => `${decade}–${decade + 9}`).join(" and ")} only. Unselected decades are excluded.` : "From classic cinema to whatever comes next. Let the song lead."}</p></div>
-            <button type="button" className={`ptp-any-option ptp-any-era${decades.length === 0 ? " is-selected" : ""}`} onClick={() => setDecades([])} aria-pressed={decades.length === 0}><span className="ptp-any-vinyl" aria-hidden="true">◉</span><span><strong>Any decade</strong><small>Let the feeling choose the era</small></span><span className="ptp-option-state">{decades.length === 0 ? "SELECTED ✓" : "CLEAR SELECTION"}</span></button>
-          </section>
+            <Link href="/" className="ptp-edit-song">
+              Change track ↗
+            </Link>
+          </div>
 
-          <section className="ptp-filter-section" aria-labelledby="languages-title">
-            <div className="ptp-filter-heading"><span className="ptp-filter-index">02 / MIXER</span><div><h2 id="languages-title">The Soundboard</h2><p>Bring each language into the mix. Layer the voices of world cinema.</p></div><span className="ptp-selection-count">{languages.length ? `${languages.length} ACTIVE` : "MIXER READY"}</span></div>
-            {loadingLanguages ? <p className="ptp-filter-help">Tuning into the world&apos;s cinema…</p> : null}
-            {!loadingLanguages ? <div className="ptp-language-search"><span aria-hidden="true">⌕</span><input type="search" value={languageSearch} onChange={(event) => setLanguageSearch(event.target.value)} placeholder="Search languages or codes…" aria-label="Search movie languages" /><span className="ptp-language-count">{languageSearch.trim() ? `${orderedLanguages.searchResults.length} found` : `${orderedLanguages.availableCount} available`}</span></div> : null}
-            {!loadingLanguages ? <div className={`ptp-soundboard${languageSearch.trim() ? " is-searching" : ""}`} aria-label={languageSearch.trim() ? "Language channel search results" : "Popular language channels"}>
-              <div className="ptp-soundboard-channels">
-              {(languageSearch.trim() ? orderedLanguages.searchResults : orderedLanguages.popular).map((language, index) => {
-                const selected = languages.includes(language.iso639_1);
-                return <button key={language.iso639_1} type="button" className={`ptp-soundboard-channel${selected ? " is-active" : ""}`} style={{ "--channel-index": index } as React.CSSProperties} onClick={() => toggleLanguage(language.iso639_1)} aria-pressed={selected} aria-label={`${language.english_name}${selected ? ", active channel" : ", activate channel"}`}>
-                  <span className="ptp-channel-topline"><i className="ptp-channel-led"/><span>{language.english_name}</span></span>
-                  <span className="ptp-level-meter" aria-hidden="true"><i style={{ "--frequency-height": `${30 + ((index * 19 + index % 4 * 13) % 78)}px`, "--meter-delay": `${(index % 9) * -0.09}s` } as React.CSSProperties} /></span>
-                  <small>{language.iso639_1.toUpperCase()}</small>
-                </button>;
-              })}
-              {!languageSearch.trim() && !orderedLanguages.popular.length ? <p className="ptp-filter-help">Popular channels are unavailable. Search for a language to add it to the mix.</p> : null}
-              {languageSearch.trim() && !orderedLanguages.searchResults.length ? <p className="ptp-filter-help">No languages match “{languageSearch}”. Try another spelling.</p> : null}
+          <form className="ptp-filter-form" onSubmit={findFilms}>
+            <section className="ptp-filter-section" aria-labelledby="decades-title">
+              <div className="ptp-filter-heading">
+                <span className="ptp-filter-index">01 / ERA</span>
+                <div>
+                  <h2 id="decades-title">Drop the needle on a decade</h2>
+                  <p>Each era has its own kind of movie magic.</p>
+                </div>
+                <span className="ptp-selection-count">
+                  {decades.length ? `${decades.length} SELECTED` : "OPEN TIMELINE"}
+                </span>
               </div>
-            </div> : null}
-            <div className="ptp-any-language-wrap"><button type="button" className={`ptp-any-language${languages.length === 0 ? " is-selected" : ""}`} onClick={() => setLanguages([])} aria-pressed={languages.length === 0}><span aria-hidden="true">♫</span><strong>Any language</strong></button></div>
-          </section>
+              <div className="ptp-era-timeline" aria-label="Choose movie decades">
+                <div className="ptp-era-track" aria-hidden="true">
+                  <span
+                    className="ptp-era-track-fill"
+                    style={{
+                      left: "0%",
+                      width: `${MOVIE_DECADES.length - 1 ? (Math.max(0, ...decades.map((decade) => MOVIE_DECADES.indexOf(decade as (typeof MOVIE_DECADES)[number]))) / (MOVIE_DECADES.length - 1)) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                {MOVIE_DECADES.map((decade, index) => {
+                  const selected = decades.includes(decade);
+                  return (
+                    <button
+                      key={decade}
+                      type="button"
+                      className={`ptp-era-point${selected ? " is-selected" : ""}`}
+                      style={
+                        {
+                          "--era-position": `${(index / (MOVIE_DECADES.length - 1)) * 100}%`,
+                        } as React.CSSProperties
+                      }
+                      onClick={() => toggleDecade(decade)}
+                      aria-pressed={selected}
+                      aria-label={`${decade}s, films released between ${decade} and ${decade + 9}`}
+                    >
+                      <span className="ptp-era-node">
+                        <i />
+                      </span>
+                      <strong>{String(decade).slice(2)}s</strong>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="ptp-era-detail" aria-live="polite">
+                <span className="ptp-era-detail-kicker">
+                  {decades.length ? "YOUR SELECTED DECADES" : "THE WHOLE RECORD COLLECTION"}
+                </span>
+                <strong>
+                  {decades.length
+                    ? decades.map((decade) => `${decade}s`).join(" · ")
+                    : "Any decade"}
+                </strong>
+                <p>
+                  {decades.length
+                    ? `Films released in ${decades.map((decade) => `${decade}–${decade + 9}`).join(" and ")} only. Unselected decades are excluded.`
+                    : "From classic cinema to whatever comes next. Let the song lead."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={`ptp-any-option ptp-any-era${decades.length === 0 ? " is-selected" : ""}`}
+                onClick={() => setDecades([])}
+                aria-pressed={decades.length === 0}
+              >
+                <span className="ptp-any-vinyl" aria-hidden="true">
+                  ◉
+                </span>
+                <span>
+                  <strong>Any decade</strong>
+                  <small>Let the feeling choose the era</small>
+                </span>
+                <span className="ptp-option-state">
+                  {decades.length === 0 ? "SELECTED ✓" : "CLEAR SELECTION"}
+                </span>
+              </button>
+            </section>
 
-          {error ? <p className="ptp-error" role="alert">{error}</p> : null}
-          <div className="ptp-filter-footer"><p><span className="ptp-footer-star">✳</span> Your filters set the scene.<br />Your song sets the feeling.</p><button className="ptp-submit ptp-find-films" type="submit" disabled={loading || loadingLanguages || !songTitle || !artist}><span className="ptp-button-vinyl" aria-hidden="true"><i /></span><span>Find my films <small>{decades.length || languages.length ? "YOUR CUSTOM CUT" : "LET THE SONG DECIDE"}</small></span><span className="ptp-submit-arrow" aria-hidden="true">↗</span></button></div>
-        </form>
-      </section> : null}
+            <section className="ptp-filter-section" aria-labelledby="languages-title">
+              <div className="ptp-filter-heading">
+                <span className="ptp-filter-index">02 / MIXER</span>
+                <div>
+                  <h2 id="languages-title">The Soundboard</h2>
+                  <p>Bring each language into the mix. Layer the voices of world cinema.</p>
+                </div>
+                <span className="ptp-selection-count">
+                  {languages.length ? `${languages.length} ACTIVE` : "MIXER READY"}
+                </span>
+              </div>
+              {loadingLanguages ? (
+                <p className="ptp-filter-help">Tuning into the world&apos;s cinema…</p>
+              ) : null}
+              {!loadingLanguages ? (
+                <div className="ptp-language-search">
+                  <span aria-hidden="true">⌕</span>
+                  <input
+                    type="search"
+                    value={languageSearch}
+                    onChange={(event) => setLanguageSearch(event.target.value)}
+                    placeholder="Search languages or codes…"
+                    aria-label="Search movie languages"
+                  />
+                  <span className="ptp-language-count">
+                    {languageSearch.trim()
+                      ? `${orderedLanguages.searchResults.length} found`
+                      : `${orderedLanguages.availableCount} available`}
+                  </span>
+                </div>
+              ) : null}
+              {!loadingLanguages ? (
+                <div
+                  className={`ptp-soundboard${languageSearch.trim() ? " is-searching" : ""}`}
+                  aria-label={
+                    languageSearch.trim()
+                      ? "Language channel search results"
+                      : "Popular language channels"
+                  }
+                >
+                  <div className="ptp-soundboard-channels">
+                    {(languageSearch.trim()
+                      ? orderedLanguages.searchResults
+                      : orderedLanguages.popular
+                    ).map((language, index) => {
+                      const selected = languages.includes(language.iso639_1);
+                      return (
+                        <button
+                          key={language.iso639_1}
+                          type="button"
+                          className={`ptp-soundboard-channel${selected ? " is-active" : ""}`}
+                          style={{ "--channel-index": index } as React.CSSProperties}
+                          onClick={() => toggleLanguage(language.iso639_1)}
+                          aria-pressed={selected}
+                          aria-label={`${language.english_name}${selected ? ", active channel" : ", activate channel"}`}
+                        >
+                          <span className="ptp-channel-topline">
+                            <i className="ptp-channel-led" />
+                            <span>{language.english_name}</span>
+                          </span>
+                          <span className="ptp-level-meter" aria-hidden="true">
+                            <i
+                              style={
+                                {
+                                  "--frequency-height": `${30 + ((index * 19 + (index % 4) * 13) % 78)}px`,
+                                  "--meter-delay": `${(index % 9) * -0.09}s`,
+                                } as React.CSSProperties
+                              }
+                            />
+                          </span>
+                          <small>{language.iso639_1.toUpperCase()}</small>
+                        </button>
+                      );
+                    })}
+                    {!languageSearch.trim() && !orderedLanguages.popular.length ? (
+                      <p className="ptp-filter-help">
+                        Popular channels are unavailable. Search for a language to add it to the
+                        mix.
+                      </p>
+                    ) : null}
+                    {languageSearch.trim() && !orderedLanguages.searchResults.length ? (
+                      <p className="ptp-filter-help">
+                        No languages match “{languageSearch}”. Try another spelling.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              <div className="ptp-any-language-wrap">
+                <button
+                  type="button"
+                  className={`ptp-any-language${languages.length === 0 ? " is-selected" : ""}`}
+                  onClick={() => setLanguages([])}
+                  aria-pressed={languages.length === 0}
+                >
+                  <span aria-hidden="true">♫</span>
+                  <strong>Any language</strong>
+                </button>
+              </div>
+            </section>
 
-      {transitioning ? <VinylAwakening songTitle={songTitle} artist={artist} isCompleting={Boolean(results)} /> : null}
-      {results && !transitioning ? <ResultsExperience response={results} songTitle={songTitle} artist={artist} onNewSearch={reset} /> : null}
+            {error ? (
+              <p className="ptp-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="ptp-filter-footer">
+              <p>
+                <span className="ptp-footer-star">✳</span> Your filters set the scene.
+                <br />
+                Your song sets the feeling.
+              </p>
+              <button
+                className="ptp-submit ptp-find-films"
+                type="submit"
+                disabled={loading || loadingLanguages || !songTitle || !artist}
+              >
+                <span className="ptp-button-vinyl" aria-hidden="true">
+                  <i />
+                </span>
+                <span>
+                  Find my films{" "}
+                  <small>
+                    {decades.length || languages.length ? "YOUR CUSTOM CUT" : "LET THE SONG DECIDE"}
+                  </small>
+                </span>
+                <span className="ptp-submit-arrow" aria-hidden="true">
+                  ↗
+                </span>
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
-      <footer className="ptp-footer"><span>MADE FOR THE FEELING, NOT THE GENRE.</span><span>GEMINI × TMDB</span></footer>
+      {transitioning ? (
+        <VinylAwakening songTitle={songTitle} artist={artist} isCompleting={Boolean(results)} />
+      ) : null}
+      {results && !transitioning ? (
+        <ResultsExperience
+          response={results}
+          songTitle={songTitle}
+          artist={artist}
+          onNewSearch={reset}
+        />
+      ) : null}
+
+      <footer className="ptp-footer">
+        <span>MADE FOR THE FEELING, NOT THE GENRE.</span>
+        <span>GEMINI × TMDB</span>
+      </footer>
     </main>
   );
+}
+
+function waitForTransition(duration: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, duration);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }

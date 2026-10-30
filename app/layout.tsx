@@ -3,8 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "PitchToPicture — Turn your song into cinema",
-  description:
-    "Discover five movies that capture the emotional world of your song.",
+  description: "Discover five movies that capture the emotional world of your song.",
 };
 
 export default function RootLayout({
@@ -14,9 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
